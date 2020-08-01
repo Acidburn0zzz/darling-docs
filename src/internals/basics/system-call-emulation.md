@@ -1,68 +1,86 @@
-# System call emulation
+# Émulation d'appel système
 
-System calls are the most critical interface of all user space software. They
-are the means of invoking kernel's functionality. Without them, software would
-not be able to communicate with the user, access the file system or establish
-network connections.
+Les appels système sont l'interface la plus critique de tous les logiciels de l'espace
+utilisateur. Ils sont le moyen d'invoquer la fonctionnalité du noyau. Sans eux, le 
+logiciel ne pas pouvoir communiquer avec l'utilisateur, accéder au système de fichiers 
+ou établir les connexions de réseau.
 
-Every kernel provides a very specific set of system calls, even if there is a
-similar set of libc APIs available on different systems. For example, the system
-call set greatly differs between Linux and FreeBSD.
+Chaque noyau fournit un ensemble très spécifique d'appels système, même s'il y a un 
+ensemble similaire d'API libc disponibles sur différents systèmes. 
+Par exemple, le système L'ensemble d'appels diffère grandement entre Linux et FreeBSD.
 
-MacOS uses a kernel named XNU. XNU's system calls differ greatly from those of
-Linux, which is why XNU system call emulation is at the heart of Darling.
+MacOS utilise un noyau nommé XNU. Les appels système de XNU diffèrent grandement de 
+ceux de Linux, c'est pourquoi l'émulation des appels système XNU est au cœur de Darling.
 
-## XNU system calls
+## Appels système XNU
 
-Unlike other kernels, XNU has three distinct system call tables:
+Contrairement aux autres noyaux, XNU possède trois tables d'appels système distinctes:
 
- 1. **BSD system calls**, invoked via sysenter/syscall. These calls frequently
-    have a direct counterpart on Linux, which makes them easiest to implement.
- 2. **Mach system calls**, which use negative system call numbers. These are
-    non-existent on Linux and are mostly implemented in the darling-mach Linux
-    kernel module. These calls are built around [Mach
-    ports](../macos-specifics/mach-ports.md).
- 3. **Machine dependent system calls**, invoked via `int 0x82`. There is only a
-    few of them and they are mainly related to [thread-local
-    storage](../threading/thread-local-storage.md).
+1. ** Appels système BSD **, appelés via sysenter / syscall. Ces appels fréquemment
+      ont un équivalent direct sur Linux, ce qui les rend plus faciles à implémenter.
+2. ** Appels système Mach **, qui utilisent des numéros d'appel système négatifs. 
+      Ceux-ci sont
+      inexistants sous Linux et sont principalement implémentés dans le Linux chéri
+      module noyau. Ces appels sont construits autour de [Mach ports] 
+      (../ macos-specifics / mach-ports.md).
+3. ** Appels système dépendant de la machine **, appelés via `int 0x82`. Il n'y a qu'un
+      peu d'entre eux et ils sont principalement liés à [thread-local stockage]
+      (../ threading / thread-local-storage.md).
 
 ## Introduction
 
-Darling emulates system calls by providing a modified
-`/usr/lib/system/libsystem_kernel.dylib` library, the source code of which is
-located in `src/kernel`. Even though some parts of the emulation are located in
-Darling's kernel module (located in `src/external/lkm`), Darling's emulation is
-user space based.
+    Darling émule les appels système en fournissant un 
+    Bibliothèque `/ usr / lib / system / libsystem_kernel.dylib`, dont le code source 
+    est situé dans `src / kernel`. 
+    Même si certaines parties de l'émulation se trouvent dans Module de noyau de Darling 
+    (situé dans `src / external / lkm`), l'émulation de Darling est basé sur l'espace 
+    utilisateur.
 
-This is why `libsystem_kernel.dylib` (and also `dyld`, which contains a static
-build of this library) can never be copied from macOS to Darling.
+C'est pourquoi `libsystem_kernel.dylib` (et aussi` dyld`, qui contient un build de cette 
+bibliothèque) ne peut jamais être copié de macOS vers Darling.
 
-Emulating XNU system calls directly in Linux would have a few benefits, but
-isn't really workable. Unlike BSD kernels, Linux has no support for foreign
-system call emulation and having such an extensive and intrusive patchset merged
-into Linux would be too difficult. Requiring Darling's users to patch their
-kernels is out of question as well.
+L'émulation des appels système XNU directement sous Linux aurait quelques avantages, mais
+n'est pas vraiment réalisable. Contrairement aux noyaux BSD, Linux ne prend pas en charge 
+les émulation d'appel système et fusion d'un ensemble de patchs aussi vaste et intrusif sous 
+Linux serait trop difficile. 
+Exiger des utilisateurs de Darling de patcher leur kernels est également hors de question.
 
-### Disadvantages of this approach
+### Inconvénients de cette approche
 
-* Inability to run a full copy of macOS under Darling (notwithstanding the
-  legality of such endeavor), at least the files mentioned above need to be
-  different.
+* Impossibilité d'exécuter une copie complète de macOS sous Darling (nonobstant le
+  légalité d'une telle entreprise), au moins les fichiers mentionnés ci-dessus doivent être
+  différent.
 
-* Inability to run software making direct system calls. This includes some old UPX-packed executables. In the past, software written in Go also belonged in this group, but this is no longer the case. Note that [Apple provides no
-  support](https://developer.apple.com/library/content/qa/qa1118/_index.html)
-  for making direct system calls (which is effectively very similar to
-  distributing statically linked executables described in the article) and
-  frequently changes the system call table, hence such software is bound to
-  break over time.
+* Incapacité d'exécuter le logiciel faisant des appels système directs. 
+  Cela inclut certains anciens exécutables compressés avec UPX. Dans le passé, 
+  les logiciels écrits en Go appartenaient également à ce groupe, mais ce n'est plus le cas. 
+  Notez que : 
+  
+  [Apple ne fournit aucun support] (https://developer.apple.com/library/content/qa/qa1118/_index.html)
+  pour passer des appels système directs 
+  
+  (ce qui est en fait très similaire à distribuer des exécutables liés statiquement décrits 
+  dans l'article) en plus de ça, Apple modifie fréquemment la table des appels système, ce 
+  qui explique grandement les souçis que l'ont rencontre avec chaque nouvelle mise-à-jours 
+  vers une version version majeur de leurs systeme et les logiciels que vous pouvez vous 
+  procurrer en temps que logiciels tiers. Cette methodes fort discutable toutes notre 
+  reimplementations est donc dors et déja vouée à echouée un jours non prévisible et ce pour des 
+  raisons que nous ne pouvons prévoire. 
+  Mais cela n'entame en aucun cas notre motivation car au fil du temp nous comprennont de mieux 
+  les différents principes sous-jacent relatifs aux noyaux systemes des os en questions ce qui 
+  techniquement est trés instructifs et pratiquement nous allons de plus en plus vite pour 
+  re-transcrire une modifications pour qu'elle ne conduise pas vers une erreures. C'est donc 
+  pour de bonne raisons que nous vous conseillons de ne pas utiliser des versions dite long term supp.
+  Mais plustot de suivres notre repos github officiels et d'apprendre à actualiser vos sources 
+  directement depuis les corrections afin de coller au mieux dans le temps avec nous au fils de l'eau.
 
-### Advantages of this approach
+### Avantages de cette approche
+  * Développement nettement plus facile.
+  * Pas besoin de s'inquiéter de la fusion des correctifs dans Linux.
+  * Il est plus facile pour les utilisateurs d'avoir le dernier code disponible, 
+    il n'est pas nécessaire de l'exécuter le dernier noyau à avoir l'émulation 
+    d'appel système la plus récente.
 
-* Significantly easier development.
-* No need to worry about having patches merged into Linux.
-* It is easier for users to have newest code available, it is not needed to run
-  the latest kernel to have the most up to date system call emulation.
-
-## Implementation
+## La mise en oeuvre
 
 TODO
